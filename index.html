@@ -18,7 +18,15 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans
 .crumbs a{cursor:pointer;color:var(--accent)}.crumbs a:hover{text-decoration:underline}
 button.t{font:inherit;font-size:13px;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 11px;cursor:pointer}
 button.t:hover{border-color:var(--accent)}button.t.p{background:var(--accent);border-color:var(--accent);color:#fff}
-.sheet{background:none;border:1px solid transparent;padding:16px 28px 120px 88px;flex:1;min-height:0;overflow:auto;cursor:text;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.sheet{background:none;border:1px solid transparent;padding:16px 28px 120px 88px;flex:1;min-height:0;overflow:auto;cursor:text;scrollbar-width:thin;scrollbar-color:transparent transparent;transition:scrollbar-color .18s ease}
+.ic{background:none!important;border-color:transparent!important;color:var(--mute)!important;padding:3px 8px!important;font-size:18px!important;line-height:1.1}
+.ic:hover{color:var(--ink)!important;border-color:var(--line)!important}
+.head{flex:none;display:none;padding:2px 28px 0 88px}
+.head.show{display:block}
+@media (max-width:700px){.head{padding-left:56px}}
+.head textarea{display:block;width:100%;flex:none;font-size:26px;font-weight:600;line-height:34px;padding:4px 4px;min-height:42px;color:var(--ink)}
+.head textarea::placeholder{color:var(--mute)}
+.sheet.sb{scrollbar-color:var(--mute) transparent}
 @media (max-width:700px){.sheet{padding-left:56px}}
 body.multi,body.multi *{user-select:none;-webkit-user-select:none;cursor:default}
 body.multi textarea{pointer-events:none}
@@ -47,15 +55,8 @@ textarea{flex:1;min-width:0;min-height:28px;font:inherit;color:inherit;backgroun
 .node.done>.row textarea{color:var(--mute)}
 .hint{flex:none;margin-top:8px;font-size:12.5px;color:var(--mute);line-height:1.7}
 kbd{font:inherit;font-size:11.5px;background:var(--btn);border:1px solid var(--line);border-radius:4px;padding:0 5px}
-.ov{position:fixed;inset:0;background:rgba(10,14,18,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
-.ov.show{display:flex}
-.modal{background:var(--page);border:1px solid var(--line);border-radius:12px;width:min(640px,100%);max-height:90%;display:flex;flex-direction:column;gap:10px;padding:16px}
-.modal h2{margin:0;font-size:17px;font-weight:600}
-.opts{display:flex;gap:14px;align-items:center;font-size:14px;flex-wrap:wrap}
-.opts select{font:inherit;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
-.modal textarea{flex:1;min-height:260px;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre;overflow:auto;resize:none}
-.modal .acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
-.ok{font-size:13px;color:var(--accent);margin-right:auto}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px);background:var(--page);color:var(--ink);border:1px solid var(--accent);border-radius:8px;padding:7px 14px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30}
+.toast.show{opacity:1;transform:translate(-50%,0)}
 .search{position:relative;display:flex;align-items:center}
 .search input{font:inherit;font-size:13px;width:230px;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 28px 5px 10px;outline:0}
 .search input:focus,.search.on input{border-color:var(--accent)}
@@ -72,27 +73,20 @@ kbd{font:inherit;font-size:11.5px;background:var(--btn);border:1px solid var(--l
 <div class="page">
   <div class="bar">
     <div class="crumbs" id="crumbs"></div>
-    <button class="t kb" id="inBtn">Indent →</button>
-    <button class="t kb" id="outBtn">← Outdent</button>
+    <button class="t ic kb" id="inBtn" title="Indent (Tab)" aria-label="Indent">→</button>
+    <button class="t ic kb" id="outBtn" title="Outdent (Shift+Tab)" aria-label="Outdent">←</button>
+    <button class="t ic kb" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo">↺</button>
+    <button class="t ic kb" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo">↻</button>
     <div class="search" id="qBox"><input id="qIn" type="text" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false" enterkeyhint="search"><button class="x" id="qx" title="Clear search" aria-label="Clear search">×</button></div>
     <button class="t" id="moreBtn" title="More" aria-label="More">⋯</button>
   </div>
+  <div class="head" id="head"><textarea id="title" rows="1" placeholder="Untitled" spellcheck="false" aria-label="Current topic"></textarea></div>
   <div class="sheet" id="tree"></div>
 </div>
 
-<div class="menu" id="topMenu"><button data-a="expandAll">Expand all</button><button data-a="collapseAll">Collapse all</button><button data-a="exportAll">Export text</button></div>
-<div class="menu" id="menu"><button data-a="expand">Expand this subtree</button><button data-a="collapse">Collapse this subtree</button><button data-a="export">Export this subtree</button><button data-a="delete">Delete</button></div>
-<div class="ov" id="ov">
-  <div class="modal">
-    <h2 id="mt">Export as text</h2>
-    <div class="opts">
-      <label>Indent <select id="indent"><option value="  ">2 spaces</option><option value="    ">4 spaces</option><option value="&#9;">Tab</option></select></label>
-      <label><input type="checkbox" id="dash" checked> Prefix with “- ”</label>
-    </div>
-    <textarea id="out" readonly></textarea>
-    <div class="acts"><span class="ok" id="ok"></span><button class="t" id="closeBtn">Close</button><button class="t p" id="copyBtn">Copy</button></div>
-  </div>
-</div>
+<div class="menu" id="topMenu"><button data-a="expandAll">Expand All</button><button data-a="collapseAll">Collapse All</button><button data-a="exportVis">Export Visible</button><button data-a="exportAll">Export All</button></div>
+<div class="menu" id="menu"><button data-a="expand">Expand All</button><button data-a="collapse">Collapse All</button><button data-a="exportVis">Export Visible</button><button data-a="export">Export</button><button data-a="delete">Delete</button></div>
+<div class="toast" id="toast"></div>
 
 <script>
 let uid = 0;
@@ -205,9 +199,27 @@ function render(focusId, pos) {
   shownKids(zoom).forEach(c => tree.appendChild(row(c)));
   if (searching() && !tree.firstChild) { const m = el('div', 'nomatch'); m.textContent = 'No matches'; tree.appendChild(m); }
   tree.querySelectorAll('textarea').forEach(fit);
-  crumbs(); save();
+  crumbs(); head(); save();
   if (focusId) focusNode(focusId, pos);
 }
+// Big title for the bullet you zoomed into (hidden at Home). It edits that bullet's text.
+const titleEl = document.getElementById('title'), headEl = document.getElementById('head');
+function head() {
+  const on = zoom !== root; headEl.classList.toggle('show', on);
+  if (!on) return;
+  if (document.activeElement !== titleEl) titleEl.value = zoom.text;
+  fit(titleEl);
+}
+const toFirst = () => { const c = zoom.children[0]; if (c) focusNode(c.id, 0); };
+titleEl.addEventListener('beforeinput', e => { if ((e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') && e.cancelable) { e.preventDefault(); toFirst(); } });
+titleEl.addEventListener('input', () => {
+  const v = titleEl.value.replace(/\n/g, ' '); if (v !== titleEl.value) titleEl.value = v;
+  zoom.text = v; fit(titleEl); crumbs(); save(true);
+});
+titleEl.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Enter' || (e.key === 'ArrowDown' && titleEl.selectionEnd === titleEl.value.length)) { e.preventDefault(); toFirst(); }
+});
 function focusNode(id, pos) {
   const t = document.querySelector(`textarea[data-id="${id}"]`);
   if (!t) return; t.focus();
@@ -228,8 +240,9 @@ function row(n, inSel) {
   const wrap = el('div', 'node'); wrap.dataset.id = n.id;
   const r = el('div', 'row'); const selOn = inSel || sel.has(n); if (selOn) r.classList.add('sel'); els.set(n, r);
   const ar = el('button', 'arrow' + (n.children.length ? '' : ' hide') + (isOpen(n) ? ' open' : ''));
-  ar.textContent = '▸'; ar.tabIndex = -1; ar.title = 'Collapse / expand';
-  ar.onclick = () => { setNodeOpen(n, !isOpen(n)); render(); };
+  ar.textContent = '▸'; ar.tabIndex = -1; ar.title = 'Collapse / expand (Ctrl+click: all levels)';
+  // Ctrl/Cmd+click expands or collapses this bullet and everything under it.
+  ar.onclick = e => { const o = !isOpen(n); if (e.ctrlKey || e.metaKey) setOpen(n, o); else setNodeOpen(n, o); render(); };
   const bu = el('a', 'bullet' + (n.children.length && !isOpen(n) ? ' closed' : '')); bu.innerHTML = '<i></i>'; bu.title = 'Zoom in';
   bu.onclick = () => { zoom = n; render(n.children.length ? n.children[0].id : null); if (!n.children.length) focusNode(zoom.children[0].id); };
   const t = el('textarea'); t.rows = 1; t.value = n.text; t.dataset.id = n.id; t.spellcheck = false;
@@ -249,14 +262,14 @@ function row(n, inSel) {
     n.text = t.value; if (searching()) sKeep.add(n); if (hl) hl.innerHTML = markHtml(t.value); fit(t); save(true);
   });
   t.addEventListener('keydown', e => { soft = (e.key === 'Enter' || e.keyCode === 13) && e.shiftKey; keys(e, n, t); });
-  const dt = el('button', 'dots'); dt.textContent = '⋯'; dt.tabIndex = -1; dt.title = 'Expand / collapse subtree';
+  const dt = el('button', 'dots'); dt.textContent = '⋯'; dt.tabIndex = -1; dt.title = 'More';
   dt.onclick = e => { e.stopPropagation(); openMenu(n, dt); };
   bu.draggable = true;
   bu.ondragstart = e => { dragSet = sel.has(n) ? roots() : [n]; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', toText(dragSet)); e.dataTransfer.setDragImage(r, 10, 10); r.classList.add('dragging'); };
   bu.ondragend = () => { dragSet = null; clearDrop(); r.classList.remove('dragging'); };
   r.ondragover = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); clearDrop(); r.classList.add('drop-' + zone(e, r)); };
   r.ondrop = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); const z = zone(e, r), items = dragSet; dragSet = null; clearDrop(); moveTo(items, n, z); };
-  r.addEventListener('mousedown', e => { if (e.shiftKey || e.ctrlKey || e.metaKey) { e.preventDefault(); pick(n, e); } });
+  r.addEventListener('mousedown', e => { if ((e.shiftKey || e.ctrlKey || e.metaKey) && !e.target.closest('.arrow')) { e.preventDefault(); pick(n, e); } });
   t.addEventListener('focus', () => { anchor = n; if (sel.size) setSel(new Set()); });
   r.append(dt, ar, bu, tw); wrap.appendChild(r);
   const kk = shownKids(n);
@@ -321,12 +334,12 @@ function delItems(items) {
 const menu = document.getElementById('menu');
 function openMenu(n, b) {
   menuT = sel.has(n) ? roots() : [n]; const r = b.getBoundingClientRect();
-  topMenu.classList.remove('show'); menu.style.left = Math.min(r.left, innerWidth - 190) + 'px'; menu.style.top = Math.min(r.bottom, innerHeight - 130) + 'px'; menu.classList.add('show');
+  topMenu.classList.remove('show'); menu.style.left = Math.min(r.left, innerWidth - 190) + 'px'; menu.style.top = Math.min(r.bottom, innerHeight - 175) + 'px'; menu.classList.add('show');
 }
 const setOpen = (n, o) => { if (n.children.length) setNodeOpen(n, o); n.children.forEach(c => setOpen(c, o)); };
 menu.onclick = e => {
   const a = e.target.dataset.a; if (!a) return; menu.classList.remove('show');
-  if (a === 'delete') delItems(menuT); else if (a === 'export') showExport(menuT); else { menuT.forEach(n => setOpen(n, a === 'expand')); render(); }
+  if (a === 'delete') delItems(menuT); else if (a === 'export') exportText(menuT, false); else if (a === 'exportVis') exportText(menuT, true); else { menuT.forEach(n => setOpen(n, a === 'expand')); render(); }
 };
 document.addEventListener('click', e => { if (!menu.contains(e.target)) menu.classList.remove('show'); if (!topMenu.contains(e.target)) topMenu.classList.remove('show'); });
 
@@ -397,7 +410,7 @@ function insertItems(items, target, replaceEmpty) {
   sel.clear(); render(last.id);
 }
 document.addEventListener('paste', e => {
-  if (modalOpen() || !e.clipboardData || (e.target && e.target.id === 'qIn')) return;
+  if (!e.clipboardData || (e.target && (e.target.id === 'qIn' || e.target.id === 'title'))) return;
   const text = e.clipboardData.getData('text/plain'), html = e.clipboardData.getData('text/html');
   let items = /<li[\s>]/i.test(html) ? parseHtml(html) : [];
   if (!items.length) items = parseOutline(text);
@@ -413,31 +426,22 @@ document.addEventListener('paste', e => {
   insertItems(items, target, !!a);
 }, true);
 
-function toText(list = zoom.children) {
-  const ind = document.getElementById('indent').value, dash = document.getElementById('dash').checked ? '- ' : '';
+// Plain text export: 2-space indent, "- " prefix. With visible = true, children of collapsed bullets are left out.
+function toText(list, visible) {
   const out = [];
-  (function w(list, d) { for (const n of list) { out.push(ind.repeat(d) + dash + n.text.replace(/\n/g, ' ')); w(n.children, d + 1); } })(list, 0);
+  (function w(l, d) { for (const n of l) { out.push('  '.repeat(d) + '- ' + n.text.replace(/\n/g, ' ')); w(visible ? shownKids(n) : n.children, d + 1); } })(list || (visible ? shownKids(zoom) : zoom.children), 0);
   return out.join('\n');
 }
-const ov = document.getElementById('ov'), outEl = document.getElementById('out');
-const modalOpen = () => ov.classList.contains('show');
-const refresh = () => { outEl.value = toText(exportList || undefined); document.getElementById('ok').textContent = ''; };
-let exportList = null;
-function showExport(list) {
-  exportList = list; document.getElementById('mt').textContent = !list ? 'Export as text' : list.length > 1 ? 'Export selection' : 'Export “' + (list[0].text.slice(0, 30) || 'bullet') + '” subtree';
-  refresh(); ov.classList.add('show'); outEl.focus(); outEl.select();
+const toastEl = document.getElementById('toast'); let toastT;
+function toast(m) { toastEl.textContent = m; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 1400); }
+async function copyText(s) {
+  try { await navigator.clipboard.writeText(s); return true; } catch (e) {}
+  const t = document.createElement('textarea'); t.value = s; t.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+  document.body.appendChild(t); t.select(); let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {} t.remove(); return ok;
 }
-document.getElementById('closeBtn').onclick = () => ov.classList.remove('show');
-ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { ov.classList.remove('show'); topMenu.classList.remove('show'); } });
-document.getElementById('indent').onchange = refresh;
-document.getElementById('dash').onchange = refresh;
-document.getElementById('copyBtn').onclick = async () => {
-  let ok = false;
-  try { await navigator.clipboard.writeText(outEl.value); ok = true; } catch (e) {}
-  if (!ok) { outEl.focus(); outEl.select(); try { ok = document.execCommand('copy'); } catch (e) {} }
-  document.getElementById('ok').textContent = ok ? 'Copied' : 'Press Ctrl+C to copy';
-};
+async function exportText(list, visible) { const s = toText(list, visible); toast(!s ? 'Nothing to export' : (await copyText(s)) ? 'Copied to clipboard' : 'Copy failed'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') topMenu.classList.remove('show'); });
 function setAll(open) { (function w(n) { n.children.forEach(c => { if (c.children.length) setNodeOpen(c, open); w(c); }); })(zoom); render(); }
 const topMenu = document.getElementById('topMenu'), moreBtn = document.getElementById('moreBtn');
 moreBtn.onclick = e => {
@@ -448,7 +452,7 @@ moreBtn.onclick = e => {
 };
 topMenu.onclick = e => {
   const a = e.target.dataset.a; if (!a) return; topMenu.classList.remove('show');
-  if (a === 'expandAll') setAll(true); else if (a === 'collapseAll') setAll(false); else showExport(null);
+  if (a === 'expandAll') setAll(true); else if (a === 'collapseAll') setAll(false); else exportText(null, a === 'exportVis');
 };
 
 // Toolbar fallbacks for touch screens and hosts that swallow Enter / Tab.
@@ -456,9 +460,11 @@ topMenu.onclick = e => {
 document.querySelectorAll('.kb').forEach(b => b.addEventListener('mousedown', e => e.preventDefault()));
 document.getElementById('inBtn').onclick = () => tab(false);
 document.getElementById('outBtn').onclick = () => tab(true);
+document.getElementById('undoBtn').onclick = undo;
+document.getElementById('redoBtn').onclick = redo;
 
 document.addEventListener('keydown', e => {
-  if (modalOpen() || (e.target && e.target.id === 'qIn')) return; // the search box keeps its own Ctrl+A / Ctrl+Z
+  if (e.target && (e.target.id === 'qIn' || e.target.id === 'title')) return; // the search box and title keeps its own Ctrl+A / Ctrl+Z
   const mod = e.ctrlKey || e.metaKey, k = (e.key || '').toLowerCase();
   if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? redo() : undo(); return; }
   if (mod && k === 'a') { e.preventDefault(); const l = vis(); anchor = l[0]; cursor = l[l.length - 1]; setSel(new Set(l)); return; }
@@ -526,7 +532,18 @@ qIn.addEventListener('keydown', e => {
   else if (e.key === 'Escape' && searching()) { e.preventDefault(); endSearch(); }
 });
 document.getElementById('qx').onclick = endSearch;
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => document.querySelectorAll('#tree textarea').forEach(fit));
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => document.querySelectorAll('#tree textarea, #title').forEach(fit));
+
+// Scrollbar is hidden by default; it shows while scrolling or when the cursor is near the right edge of the outline.
+const sheet = document.getElementById('tree'); let sbT, sbNear = false;
+const showSb = () => { sheet.classList.add('sb'); clearTimeout(sbT); sbT = setTimeout(() => { if (!sbNear) sheet.classList.remove('sb'); }, 450); };
+sheet.addEventListener('scroll', showSb, { passive: true });
+document.addEventListener('mousemove', e => {
+  const b = sheet.getBoundingClientRect();
+  const near = e.clientX > b.right - 36 && e.clientX <= b.right + 8 && e.clientY >= b.top && e.clientY <= b.bottom;
+  if (near) { sbNear = true; sheet.classList.add('sb'); } else if (sbNear) { sbNear = false; showSb(); }
+});
+
 load(); render();
 </script>
 </body>
