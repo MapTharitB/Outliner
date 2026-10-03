@@ -33,7 +33,8 @@ body.multi textarea{pointer-events:none}
 .node{position:relative}
 .row{position:relative;display:flex;align-items:flex-start;border-radius:6px}
 .row.sel{background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.row.dragging{opacity:.4}.row.drop-before{box-shadow:0 -2px 0 var(--accent)}.row.drop-after{box-shadow:0 2px 0 var(--accent)}
+.row.dragging{opacity:.4}
+.dropline{position:fixed;display:none;height:2px;background:var(--accent);pointer-events:none;z-index:15}
 .row.drop-in{background:var(--halo);box-shadow:inset 0 0 0 1px var(--accent)}
 .dots{position:absolute;left:-47px;top:0;width:21px;height:28px;display:flex;align-items:center;justify-content:center;line-height:1;background:none;border:0;color:var(--mute);cursor:pointer;padding:0;font-size:16px;opacity:0}
 .row:hover .dots,.dots:focus-visible{opacity:1}
@@ -267,8 +268,6 @@ function row(n, inSel) {
   bu.draggable = true;
   bu.ondragstart = e => { dragSet = sel.has(n) ? roots() : [n]; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', toText(dragSet)); e.dataTransfer.setDragImage(r, 10, 10); r.classList.add('dragging'); };
   bu.ondragend = () => { dragSet = null; clearDrop(); r.classList.remove('dragging'); };
-  r.ondragover = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); clearDrop(); r.classList.add('drop-' + zone(e, r)); };
-  r.ondrop = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); const z = zone(e, r), items = dragSet; dragSet = null; clearDrop(); moveTo(items, n, z); };
   r.addEventListener('mousedown', e => { if ((e.shiftKey || e.ctrlKey || e.metaKey) && !e.target.closest('.arrow')) { e.preventDefault(); pick(n, e); } });
   t.addEventListener('focus', () => { anchor = n; if (sel.size) setSel(new Set()); });
   r.append(dt, ar, bu, tw); wrap.appendChild(r);
@@ -317,16 +316,50 @@ function pick(n, e) {
   if (e.shiftKey && a > -1) { const b = l.indexOf(n); cursor = n; setSel(new Set(l.slice(Math.min(a, b), Math.max(a, b) + 1))); }
   else { const x = new Set(sel); x.has(n) ? x.delete(n) : x.add(n); if (!anchor || !x.size) anchor = n; cursor = n; setSel(x); }
 }
-function zone(e, r) { const b = r.getBoundingClientRect(), y = (e.clientY - b.top) / b.height; return y < .33 ? 'before' : y > .67 ? 'after' : 'in'; }
-function clearDrop() { document.querySelectorAll('.drop-before,.drop-after,.drop-in').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-in')); }
-function okDrop(t) { for (let x = t; x; x = par.get(x)) if (dragSet.includes(x)) return false; return true; }
-function moveTo(items, t, z) {
-  items.forEach(rm);
-  if (z === 'in') { t.children.push(...items); t.open = true; }
-  else if (z === 'after' && t.open && t.children.length) t.children.unshift(...items);
-  else { const p = par.get(t); p.children.splice(p.children.indexOf(t) + (z === 'after' ? 1 : 0), 0, ...items); }
-  render(null);
+// Drag & drop. The tree decides the drop target from the pointer position and draws ONE straight indicator line,
+// so neighbouring rows never flash their own (rounded) borders.
+// Middle of a row = drop inside it (row is highlighted). Near a row edge = drop in the gap between two rows; when the gap
+// follows the last child of a deeper branch, moving the pointer left/right picks which level the item lands on
+// (sibling of the row above, of its parent, of its grandparent, ...), like WorkFlowy.
+const treeEl = document.getElementById('tree'), dropLine = el('div', 'dropline');
+document.body.appendChild(dropLine);
+let dropT = null, dropIn = null;
+const depthOf = n => { let d = 0; for (let x = par.get(n); x && x !== zoom; x = par.get(x)) d++; return d; };
+const inDrag = n => { for (let x = n; x; x = par.get(x)) if (dragSet.includes(x)) return true; return false; };
+const nextFree = (p, from) => { for (let i = from; i < p.children.length; i++) if (!dragSet.includes(p.children[i])) return p.children[i]; return null; };
+function clearDrop() { dropT = null; dropLine.style.display = 'none'; if (dropIn) { dropIn.classList.remove('drop-in'); dropIn = null; } }
+function aimDrop(e) {
+  clearDrop();
+  const list = vis().filter(n => !inDrag(n)); if (!list.length) return;
+  const rects = list.map(n => els.get(n).getBoundingClientRect()), y = e.clientY;
+  let i = 0, bd = Infinity;
+  rects.forEach((b, j) => { const d = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0; if (d < bd) { bd = d; i = j; } });
+  const f = (y - rects[i].top) / rects[i].height;
+  if (f >= .33 && f <= .67) { const n = list[i]; dropT = { parent: n, before: null, open: true }; dropIn = els.get(n); dropIn.classList.add('drop-in'); return; }
+  const g = f < .5 ? i : i + 1, p = list[g - 1], nx = list[g];
+  let ref, ry, t;
+  if (!p || (nx && par.get(nx) === p)) { ref = nx; ry = rects[g].top; t = { parent: par.get(nx), before: nx }; }
+  else {
+    const chain = []; let a = p;
+    for (let k = depthOf(p), lo = nx ? depthOf(nx) : 0; k >= lo && a; k--, a = par.get(a)) chain.push(a);
+    if (!chain.length) chain.push(p);
+    ref = chain.find(a => e.clientX >= els.get(a).getBoundingClientRect().left + 10) || chain[chain.length - 1];
+    const pp = par.get(ref); ry = rects[g - 1].bottom; t = { parent: pp, before: nextFree(pp, pp.children.indexOf(ref) + 1) };
+  }
+  dropT = t;
+  const rr = els.get(ref).getBoundingClientRect(), sh = treeEl.getBoundingClientRect();
+  if (ry < sh.top || ry > sh.bottom) return;
+  Object.assign(dropLine.style, { display: 'block', left: rr.left + 'px', width: rr.width + 'px', top: ry - 1 + 'px' });
 }
+function dropTo(items, t) {
+  items.forEach(rm);
+  if (t.open) t.parent.open = true;
+  const k = t.parent.children, i = t.before ? k.indexOf(t.before) : k.length;
+  k.splice(i < 0 ? k.length : i, 0, ...items); render(null);
+}
+treeEl.addEventListener('dragover', e => { if (!dragSet) return; aimDrop(e); if (dropT) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; } });
+treeEl.addEventListener('dragleave', e => { if (!treeEl.contains(e.relatedTarget)) clearDrop(); });
+treeEl.addEventListener('drop', e => { if (!dragSet) return; e.preventDefault(); const t = dropT, items = dragSet; dragSet = null; clearDrop(); if (t) dropTo(items, t); });
 function delItems(items) {
   const idx = vis().indexOf(items[0]); items.forEach(rm); sel.clear(); render(null);
   const l = vis(), f = l[Math.max(0, Math.min(idx - 1, l.length - 1))]; if (f) focusNode(f.id);
