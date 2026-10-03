@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Outliner</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark;
+--bg:hsl(222 25% 16%);--page:#14224a;--ink:#e6ecf7;--mute:#8b9bb8;--line:#27375f;--accent:#4cc9cc;--halo:#1f2f58;--btn:#182855}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.page{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 14px 10px}
+.page>*{width:100%;max-width:1040px;margin-left:auto;margin-right:auto}
+.bar{flex:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.bar .crumbs{flex:1;min-width:140px;font-size:14px;color:var(--mute);display:flex;gap:6px;flex-wrap:wrap}
+.crumbs a{cursor:pointer;color:var(--accent)}.crumbs a:hover{text-decoration:underline}
+button.t{font:inherit;font-size:13px;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 11px;cursor:pointer}
+button.t:hover{border-color:var(--accent)}button.t.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.sheet{background:none;border:1px solid transparent;padding:16px 28px 120px 88px;flex:1;min-height:0;overflow:auto;cursor:text;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+@media (max-width:700px){.sheet{padding-left:56px}}
+body.multi,body.multi *{user-select:none;-webkit-user-select:none;cursor:default}
+body.multi textarea{pointer-events:none}
+.node{position:relative}
+.row{position:relative;display:flex;align-items:flex-start;border-radius:6px}
+.row.sel{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.row.dragging{opacity:.4}.row.drop-before{box-shadow:0 -2px 0 var(--accent)}.row.drop-after{box-shadow:0 2px 0 var(--accent)}
+.row.drop-in{background:var(--halo);box-shadow:inset 0 0 0 1px var(--accent)}
+.dots{position:absolute;left:-47px;top:0;width:21px;height:28px;display:flex;align-items:center;justify-content:center;line-height:1;background:none;border:0;color:var(--mute);cursor:pointer;padding:0;font-size:16px;opacity:0}
+.row:hover .dots,.dots:focus-visible{opacity:1}
+.menu{position:fixed;display:none;z-index:20;background:var(--page);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 6px 24px rgba(0,0,0,.25);min-width:170px}
+.menu.show{display:block}
+.menu button{display:block;width:100%;text-align:left;font:inherit;font-size:14px;color:var(--ink);background:none;border:0;border-radius:5px;padding:6px 10px;cursor:pointer}
+.menu button:hover{background:var(--btn)}
+.arrow{position:absolute;left:-13px;top:0;width:16px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;line-height:1;background:none;border:0;color:var(--mute);cursor:pointer;padding:0;font-size:26px;opacity:0;transition:transform .12s,opacity .12s}
+.row:hover .arrow,.arrow:focus-visible{opacity:1}
+.arrow.open{transform:rotate(90deg)}.arrow.hide{visibility:hidden}
+.bullet{width:22px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.bullet i{width:7px;height:7px;border-radius:50%;background:var(--ink);opacity:.75}
+.bullet:hover i{opacity:1}
+.bullet.closed{}.bullet.closed::before{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:var(--halo);z-index:0}
+.bullet i{position:relative;z-index:1}
+.bullet{position:relative}
+textarea{flex:1;min-width:0;min-height:28px;font:inherit;color:inherit;background:transparent;border:0;outline:0;resize:none;padding:3px 4px;overflow:hidden;line-height:22px;display:block}
+.kids{margin-left:11px;padding-left:20px;border-left:1px solid var(--line)}
+.node.done>.row textarea{color:var(--mute)}
+.hint{flex:none;margin-top:8px;font-size:12.5px;color:var(--mute);line-height:1.7}
+kbd{font:inherit;font-size:11.5px;background:var(--btn);border:1px solid var(--line);border-radius:4px;padding:0 5px}
+.ov{position:fixed;inset:0;background:rgba(10,14,18,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:10}
+.ov.show{display:flex}
+.modal{background:var(--page);border:1px solid var(--line);border-radius:12px;width:min(640px,100%);max-height:90%;display:flex;flex-direction:column;gap:10px;padding:16px}
+.modal h2{margin:0;font-size:17px;font-weight:600}
+.opts{display:flex;gap:14px;align-items:center;font-size:14px;flex-wrap:wrap}
+.opts select{font:inherit;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+.modal textarea{flex:1;min-height:260px;font:13px/1.55 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre;overflow:auto;resize:none}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.ok{font-size:13px;color:var(--accent);margin-right:auto}
+.search{position:relative;display:flex;align-items:center}
+.search input{font:inherit;font-size:13px;width:230px;background:var(--btn);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 28px 5px 10px;outline:0}
+.search input:focus,.search.on input{border-color:var(--accent)}
+.search .x{display:none;position:absolute;right:5px;top:50%;transform:translateY(-50%);width:18px;height:18px;align-items:center;justify-content:center;border:0;border-radius:50%;background:var(--halo);color:var(--ink);font-size:14px;line-height:1;padding:0;cursor:pointer}
+.search.on .x{display:flex}
+.tw{position:relative;flex:1;min-width:0}
+.tw textarea{position:relative;z-index:1;width:100%}
+.hl{position:absolute;left:0;right:0;top:0;z-index:0;margin:0;padding:3px 4px;font:inherit;line-height:22px;white-space:pre-wrap;overflow-wrap:break-word;word-wrap:break-word;overflow:hidden;color:transparent;pointer-events:none}
+.hl mark{color:transparent;background:rgba(255,196,87,.24);border-radius:3px;box-shadow:0 0 0 1px rgba(255,196,87,.38)}
+.nomatch{color:var(--mute);font-size:14px;padding:3px 4px}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="bar">
+    <div class="crumbs" id="crumbs"></div>
+    <button class="t kb" id="inBtn">Indent →</button>
+    <button class="t kb" id="outBtn">← Outdent</button>
+    <div class="search" id="qBox"><input id="qIn" type="text" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false" enterkeyhint="search"><button class="x" id="qx" title="Clear search" aria-label="Clear search">×</button></div>
+    <button class="t" id="moreBtn" title="More" aria-label="More">⋯</button>
+  </div>
+  <div class="sheet" id="tree"></div>
+</div>
+
+<div class="menu" id="topMenu"><button data-a="expandAll">Expand all</button><button data-a="collapseAll">Collapse all</button><button data-a="exportAll">Export text</button></div>
+<div class="menu" id="menu"><button data-a="expand">Expand this subtree</button><button data-a="collapse">Collapse this subtree</button><button data-a="export">Export this subtree</button><button data-a="delete">Delete</button></div>
+<div class="ov" id="ov">
+  <div class="modal">
+    <h2 id="mt">Export as text</h2>
+    <div class="opts">
+      <label>Indent <select id="indent"><option value="  ">2 spaces</option><option value="    ">4 spaces</option><option value="&#9;">Tab</option></select></label>
+      <label><input type="checkbox" id="dash" checked> Prefix with “- ”</label>
+    </div>
+    <textarea id="out" readonly></textarea>
+    <div class="acts"><span class="ok" id="ok"></span><button class="t" id="closeBtn">Close</button><button class="t p" id="copyBtn">Copy</button></div>
+  </div>
+</div>
+
+<script>
+let uid = 0;
+const mk = (t = '') => ({ id: ++uid, text: t, children: [], open: true });
+const KEY = 'outliner-v1';
+let root, zoom, par = new Map();
+
+function load() {
+  try {
+    const s = localStorage.getItem(KEY);
+    if (s) {
+      const d = JSON.parse(s);
+      const fix = n => { uid = Math.max(uid, n.id); n.children.forEach(fix); return n; };
+      root = fix(d.root);
+      zoom = find(root, d.zoom) || root;
+      return;
+    }
+  } catch (e) {}
+  root = mk('root');
+  const seed = `Welcome to your outline
+  Press Enter to add bullets
+  Press Tab to nest them under the bullet above
+    Nest as deep as you like
+      There is no limit
+  Click the arrow to collapse and expand
+Export turns the whole tree into indented text
+  Paste indented text anywhere to rebuild the tree`;
+  root.children = parseOutline(seed);
+  zoom = root;
+}
+function find(n, id) { if (n.id === id) return n; for (const c of n.children) { const r = find(c, id); if (r) return r; } return null; }
+const sel = new Set(), els = new Map();
+let anchor = null, cursor = null, hist = [], hi = -1, tm = null, dragSet = null, menuT = [];
+const snap = () => JSON.stringify({ root, zoom: zoom.id });
+function record() { clearTimeout(tm); tm = null; const x = snap(); if (x === hist[hi]) return; hist.length = hi + 1; hist.push(x); if (hist.length > 300) hist.shift(); hi = hist.length - 1; }
+function save(typing) {
+  try { localStorage.setItem(KEY, snap()); } catch (e) {}
+  if (typing) { clearTimeout(tm); tm = setTimeout(record, 500); } else record();
+}
+function restore(i) {
+  const d = JSON.parse(hist[i]);
+  const fix = n => { uid = Math.max(uid, n.id); n.children.forEach(fix); return n; };
+  root = fix(d.root); zoom = find(root, d.zoom) || root; sel.clear();
+  const a = document.activeElement; render(a && a.dataset && a.dataset.id ? +a.dataset.id : null);
+}
+function undo() { if (tm) record(); if (hi > 0) restore(--hi); }
+function redo() { if (tm) record(); if (hi < hist.length - 1) restore(++hi); }
+
+function parseOutline(text) {
+  const raw = text.replace(/\r/g, '').split('\n'), ents = [];
+  raw.forEach((line, i) => {
+    if (!line.trim()) return;
+    const m = line.match(/^([ \t]*)(.*)$/);
+    const w = [...m[1]].reduce((a, ch) => a + (ch === '\t' ? 4 : 1), 0);
+    ents.push({ w, bullet: /^[-*+•–·◦▪●○■]\s+/.test(m[2]), gap: i + 1 < raw.length && !raw[i + 1].trim(), txt: m[2].replace(/^(?:[-*+•–·◦▪●○■]\s+)?(?:\[[ xX]?\]\s+)?/, '').trim() });
+  });
+  const top = mk(); const stack = [{ w: -1, node: top }]; let bump = 0, hw = 0;
+  ents.forEach((e, i) => {
+    const nx = ents[i + 1]; let w = e.w;
+    // WorkFlowy export: plain "Title", blank line, then "- " bullets at the same indent => bullets are children of Title
+    if (!e.bullet && e.gap && nx && nx.bullet && nx.w <= e.w) { bump = 1; hw = e.w; }
+    else if (!e.bullet) bump = 0;
+    else if (bump && e.w >= hw) w = e.w + 1;
+    while (stack.length > 1 && stack[stack.length - 1].w >= w) stack.pop();
+    const n = mk(e.txt); stack[stack.length - 1].node.children.push(n); stack.push({ w, node: n });
+  });
+  return top.children;
+}
+
+function buildPar(n) { n.children.forEach(c => { par.set(c, n); buildPar(c); }); }
+// Search state. While a search is active the outline is a filtered, temporary view: n.open is never touched there,
+// so ending the search brings back the real expand/collapse state exactly as it was.
+// Shown = matches plus the ancestors leading to them; Anc = shown bullets with a shown descendant (expanded in the view);
+// Keep = bullets edited or created during the search, so they don't vanish while being typed in; Over = expand/collapse clicks made during the search.
+let sq = '';
+const sShown = new Set(), sAnc = new Set(), sKeep = new Set(), sOver = new Map();
+const searching = () => !!sq;
+function computeSets() {
+  sShown.clear(); sAnc.clear(); const ql = sq.toLowerCase();
+  const w = n => { let any = false; for (const c of n.children) { const sub = w(c); if (sub) sAnc.add(c); if (sub || sKeep.has(c) || c.text.toLowerCase().includes(ql)) { sShown.add(c); any = true; } } return any; };
+  w(zoom);
+}
+const isOpen = n => searching() ? (sOver.has(n) ? sOver.get(n) : sAnc.has(n)) : n.open;
+const setNodeOpen = (n, o) => { if (searching()) sOver.set(n, o); else n.open = o; };
+function shownKids(n) {
+  if (!searching()) return n === zoom || n.open ? n.children : [];
+  if (n !== zoom && !isOpen(n)) return [];
+  return n !== zoom && sOver.get(n) === true ? n.children : n.children.filter(c => sShown.has(c));
+}
+function vis() { const o = []; (function w(n) { for (const c of shownKids(n)) { o.push(c); w(c); } })(zoom); return o; }
+const esc = x => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Backdrop markup for the textarea: same text, transparent, with the matches wrapped in <mark>. The trailing newline keeps a last empty line's height.
+function markHtml(text) {
+  const ql = sq.toLowerCase(), tl = text.toLowerCase(); let out = '', i = 0, j;
+  while ((j = tl.indexOf(ql, i)) > -1) { out += esc(text.slice(i, j)) + '<mark>' + esc(text.slice(j, j + ql.length)) + '</mark>'; i = j + ql.length; }
+  return out + esc(text.slice(i)) + '\n';
+}
+const el = (t, c) => { const e = document.createElement(t); if (c) e.className = c; return e; };
+// Height is measured before the web font loads, so it is re-measured once fonts are ready (see the end of the script).
+// scrollTop is reset because a leftover internal scroll offset shifts the caret upward and clips it on an empty bullet.
+const fit = t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; t.scrollTop = 0; };
+
+function render(focusId, pos) {
+  // The empty placeholder bullet must exist before the parent map is built; otherwise it has no parent,
+  // and Enter, Tab, paste and Backspace all fail on it until some later redraw.
+  if (!zoom.children.length) zoom.children.push(mk());
+  par = new Map(); buildPar(root);
+  els.clear(); const tree = document.getElementById('tree'); tree.innerHTML = '';
+  if (searching()) computeSets();
+  shownKids(zoom).forEach(c => tree.appendChild(row(c)));
+  if (searching() && !tree.firstChild) { const m = el('div', 'nomatch'); m.textContent = 'No matches'; tree.appendChild(m); }
+  tree.querySelectorAll('textarea').forEach(fit);
+  crumbs(); save();
+  if (focusId) focusNode(focusId, pos);
+}
+function focusNode(id, pos) {
+  const t = document.querySelector(`textarea[data-id="${id}"]`);
+  if (!t) return; t.focus();
+  const p = pos == null ? t.value.length : pos; t.setSelectionRange(p, p);
+}
+function crumbs() {
+  const c = document.getElementById('crumbs'); c.innerHTML = '';
+  const path = []; for (let n = zoom; n; n = par.get(n)) path.unshift(n);
+  path.forEach((n, i) => {
+    if (i) c.appendChild(document.createTextNode('›'));
+    const a = el('a'); a.textContent = n === root ? 'Home' : (n.text || 'Untitled');
+    if (n === zoom) { a.style.color = 'var(--ink)'; a.style.cursor = 'default'; } else a.onclick = () => { zoom = n; render(n.children[0] && n.children[0].id); };
+    c.appendChild(a);
+  });
+}
+
+function row(n, inSel) {
+  const wrap = el('div', 'node'); wrap.dataset.id = n.id;
+  const r = el('div', 'row'); const selOn = inSel || sel.has(n); if (selOn) r.classList.add('sel'); els.set(n, r);
+  const ar = el('button', 'arrow' + (n.children.length ? '' : ' hide') + (isOpen(n) ? ' open' : ''));
+  ar.textContent = '▸'; ar.tabIndex = -1; ar.title = 'Collapse / expand';
+  ar.onclick = () => { setNodeOpen(n, !isOpen(n)); render(); };
+  const bu = el('a', 'bullet' + (n.children.length && !isOpen(n) ? ' closed' : '')); bu.innerHTML = '<i></i>'; bu.title = 'Zoom in';
+  bu.onclick = () => { zoom = n; render(n.children.length ? n.children[0].id : null); if (!n.children.length) focusNode(zoom.children[0].id); };
+  const t = el('textarea'); t.rows = 1; t.value = n.text; t.dataset.id = n.id; t.spellcheck = false;
+  // The textarea sits in front of a transparent backdrop that paints the search highlight behind the text.
+  const tw = el('div', 'tw'), hl = searching() ? el('div', 'hl') : null;
+  if (hl) { hl.innerHTML = markHtml(n.text); tw.appendChild(hl); }
+  tw.appendChild(t);
+  // Shift+Enter is the one case where a newline inside a bullet is wanted; every other line break means "new bullet".
+  let soft = false;
+  const isBreak = e => e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph';
+  // Soft keyboards and IMEs often report keydown as keyCode 229 / "Unidentified", so Enter never reaches keys().
+  // beforeinput still announces the line break, so it is turned into a new bullet here instead of a raw newline.
+  t.addEventListener('beforeinput', e => { if (!soft && isBreak(e) && e.cancelable) { e.preventDefault(); enter(n, t); } });
+  t.addEventListener('input', e => {
+    // Last resort when the line break could not be cancelled: strip the newline that got in, then split the bullet there.
+    if (!soft && isBreak(e)) { const c = t.selectionStart; t.value = t.value.slice(0, c - 1) + t.value.slice(c); t.setSelectionRange(c - 1, c - 1); n.text = t.value; enter(n, t); return; }
+    n.text = t.value; if (searching()) sKeep.add(n); if (hl) hl.innerHTML = markHtml(t.value); fit(t); save(true);
+  });
+  t.addEventListener('keydown', e => { soft = (e.key === 'Enter' || e.keyCode === 13) && e.shiftKey; keys(e, n, t); });
+  const dt = el('button', 'dots'); dt.textContent = '⋯'; dt.tabIndex = -1; dt.title = 'Expand / collapse subtree';
+  dt.onclick = e => { e.stopPropagation(); openMenu(n, dt); };
+  bu.draggable = true;
+  bu.ondragstart = e => { dragSet = sel.has(n) ? roots() : [n]; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', toText(dragSet)); e.dataTransfer.setDragImage(r, 10, 10); r.classList.add('dragging'); };
+  bu.ondragend = () => { dragSet = null; clearDrop(); r.classList.remove('dragging'); };
+  r.ondragover = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); clearDrop(); r.classList.add('drop-' + zone(e, r)); };
+  r.ondrop = e => { if (!dragSet || !okDrop(n)) return; e.preventDefault(); const z = zone(e, r), items = dragSet; dragSet = null; clearDrop(); moveTo(items, n, z); };
+  r.addEventListener('mousedown', e => { if (e.shiftKey || e.ctrlKey || e.metaKey) { e.preventDefault(); pick(n, e); } });
+  t.addEventListener('focus', () => { anchor = n; if (sel.size) setSel(new Set()); });
+  r.append(dt, ar, bu, tw); wrap.appendChild(r);
+  const kk = shownKids(n);
+  if (kk.length) {
+    const k = el('div', 'kids'); kk.forEach(c => k.appendChild(row(c, selOn))); wrap.appendChild(k);
+  }
+  return wrap;
+}
+
+const rm = n => { const p = par.get(n); p.children.splice(p.children.indexOf(n), 1); };
+function indent(n) {
+  const p = par.get(n), i = p.children.indexOf(n); if (!i) return false;
+  const prev = p.children[i - 1]; p.children.splice(i, 1); prev.children.push(n); prev.open = true; return true;
+}
+function outdent(n) {
+  const p = par.get(n); if (!p || p === zoom) return false;
+  const g = par.get(p); rm(n); g.children.splice(g.children.indexOf(p) + 1, 0, n); return true;
+}
+// The bullet that toolbar buttons act on: the last one that had the caret, else the last visible one.
+const cur = () => { const l = vis(); return l.includes(anchor) ? anchor : l[l.length - 1]; };
+// Indent / outdent the selection, or the current bullet when nothing is selected. Shared by Tab, Alt+Arrows and the toolbar.
+function tab(back) {
+  const it = sel.size ? roots() : [cur()]; if (!it[0]) return;
+  if (!back && par.get(it[0]).children.indexOf(it[0]) < 1) return;
+  const t = sel.size ? null : document.querySelector(`textarea[data-id="${it[0].id}"]`), pos = t ? t.selectionStart : null;
+  (back ? it.slice().reverse() : it).forEach(n => back ? outdent(n) : indent(n));
+  render(sel.size ? null : it[0].id, pos);
+}
+// Split the bullet at the caret into a new bullet (or outdent when the bullet is empty). Shared by Enter and the toolbar.
+function enter(n, t) {
+  const p = par.get(n), pos = t.selectionStart, end = t.selectionEnd;
+  if (!n.text && !n.children.length && p !== zoom) { outdent(n); render(n.id, 0); return; }
+  n.text = t.value.slice(0, pos); const nn = mk(t.value.slice(end));
+  if (searching()) { sKeep.add(n); sKeep.add(nn); }
+  if (isOpen(n) && n.children.length) n.children.unshift(nn);
+  else p.children.splice(p.children.indexOf(n) + 1, 0, nn);
+  render(nn.id, 0);
+}
+
+function paint() { const mark = (n, p) => { const r = els.get(n), on = p || sel.has(n); if (r) r.classList.toggle('sel', on); n.children.forEach(c => mark(c, on)); }; zoom.children.forEach(c => mark(c, false)); }
+function setSel(set) { sel.clear(); set.forEach(n => sel.add(n)); paint(); if (sel.size && document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+const roots = () => { const o = []; (function w(n) { for (const c of n.children) sel.has(c) ? o.push(c) : w(c); })(zoom); return o; };
+function pick(n, e) {
+  const l = vis(), a = l.indexOf(anchor);
+  if (e.shiftKey && a > -1) { const b = l.indexOf(n); cursor = n; setSel(new Set(l.slice(Math.min(a, b), Math.max(a, b) + 1))); }
+  else { const x = new Set(sel); x.has(n) ? x.delete(n) : x.add(n); if (!anchor || !x.size) anchor = n; cursor = n; setSel(x); }
+}
+function zone(e, r) { const b = r.getBoundingClientRect(), y = (e.clientY - b.top) / b.height; return y < .33 ? 'before' : y > .67 ? 'after' : 'in'; }
+function clearDrop() { document.querySelectorAll('.drop-before,.drop-after,.drop-in').forEach(x => x.classList.remove('drop-before', 'drop-after', 'drop-in')); }
+function okDrop(t) { for (let x = t; x; x = par.get(x)) if (dragSet.includes(x)) return false; return true; }
+function moveTo(items, t, z) {
+  items.forEach(rm);
+  if (z === 'in') { t.children.push(...items); t.open = true; }
+  else if (z === 'after' && t.open && t.children.length) t.children.unshift(...items);
+  else { const p = par.get(t); p.children.splice(p.children.indexOf(t) + (z === 'after' ? 1 : 0), 0, ...items); }
+  render(null);
+}
+function delItems(items) {
+  const idx = vis().indexOf(items[0]); items.forEach(rm); sel.clear(); render(null);
+  const l = vis(), f = l[Math.max(0, Math.min(idx - 1, l.length - 1))]; if (f) focusNode(f.id);
+}
+const menu = document.getElementById('menu');
+function openMenu(n, b) {
+  menuT = sel.has(n) ? roots() : [n]; const r = b.getBoundingClientRect();
+  topMenu.classList.remove('show'); menu.style.left = Math.min(r.left, innerWidth - 190) + 'px'; menu.style.top = Math.min(r.bottom, innerHeight - 130) + 'px'; menu.classList.add('show');
+}
+const setOpen = (n, o) => { if (n.children.length) setNodeOpen(n, o); n.children.forEach(c => setOpen(c, o)); };
+menu.onclick = e => {
+  const a = e.target.dataset.a; if (!a) return; menu.classList.remove('show');
+  if (a === 'delete') delItems(menuT); else if (a === 'export') showExport(menuT); else { menuT.forEach(n => setOpen(n, a === 'expand')); render(); }
+};
+document.addEventListener('click', e => { if (!menu.contains(e.target)) menu.classList.remove('show'); if (!topMenu.contains(e.target)) topMenu.classList.remove('show'); });
+
+function keys(e, n, t) {
+  // Keys pressed while an IME is composing belong to the IME (they confirm the text); line breaks from soft keyboards arrive via beforeinput.
+  if (e.isComposing || e.keyCode === 229) return;
+  const pos = t.selectionStart, end = t.selectionEnd, p = par.get(n);
+  const mod = e.ctrlKey || e.metaKey;
+  const isEnter = e.key === 'Enter' || e.keyCode === 13, isTab = e.key === 'Tab' || e.keyCode === 9;
+  if (e.key === 'Escape') { e.preventDefault(); anchor = cursor = n; setSel(new Set([n])); return; }
+  if (e.shiftKey && !mod && !e.altKey && ((e.key === 'ArrowUp' && pos === 0) || (e.key === 'ArrowDown' && end === t.value.length))) { e.preventDefault(); anchor = cursor = n; setSel(new Set([n])); return; }
+  if (isTab || (e.altKey && !e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft'))) {
+    e.preventDefault(); anchor = n;
+    tab(e.shiftKey || e.key === 'ArrowLeft');
+    return;
+  }
+  if (isEnter && !e.shiftKey && !mod) {
+    e.preventDefault(); enter(n, t); return;
+  }
+  if (e.key === 'Backspace' && pos === 0 && end === 0) {
+    const list = vis(), i = list.indexOf(n), prev = list[i - 1];
+    if (!n.children.length && prev) {
+      e.preventDefault();
+      const at = prev.text.length; prev.text += n.text; if (searching()) sKeep.add(prev); rm(n); render(prev.id, at);
+    } else if (!n.children.length && !prev && p.children.length > 1) {
+      e.preventDefault(); const nx = p.children[1]; rm(n); render(nx.id, 0);
+    }
+    return;
+  }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    const up = e.key === 'ArrowUp';
+    if (e.altKey && e.shiftKey) {
+      e.preventDefault(); const i = p.children.indexOf(n), j = i + (up ? -1 : 1);
+      if (j >= 0 && j < p.children.length) { [p.children[i], p.children[j]] = [p.children[j], p.children[i]]; render(n.id, pos); }
+      return;
+    }
+    if (mod) {
+      e.preventDefault();
+      if (n.children.length) { setNodeOpen(n, !up); render(n.id, pos); }
+      return;
+    }
+    const first = t.value.lastIndexOf('\n', pos - 1) === -1, last = t.value.indexOf('\n', end) === -1;
+    if ((up && first) || (!up && last)) {
+      const list = vis(), nx = list[list.indexOf(n) + (up ? -1 : 1)];
+      if (nx) { e.preventDefault(); focusNode(nx.id, Math.min(pos, nx.text.length)); }
+    }
+  }
+}
+
+function parseHtml(h) {
+  const d = new DOMParser().parseFromString(h, 'text/html');
+  const walk = l => [...l.children].filter(x => x.tagName === 'LI').map(li => {
+    const n = mk(), c = li.cloneNode(true); c.querySelectorAll('ul,ol').forEach(x => x.remove());
+    n.text = c.textContent.replace(/\s+/g, ' ').trim();
+    [...li.querySelectorAll('ul,ol')].filter(u => u.closest('li') === li).forEach(u => n.children.push(...walk(u)));
+    return n;
+  });
+  return [...d.querySelectorAll('ul,ol')].filter(u => !u.parentElement.closest('ul,ol')).flatMap(walk);
+}
+function insertItems(items, target, replaceEmpty) {
+  const p = par.get(target); let last;
+  if (replaceEmpty && !target.text.trim() && !target.children.length) {
+    target.text = items[0].text; target.children = items[0].children;
+    p.children.splice(p.children.indexOf(target) + 1, 0, ...items.slice(1));
+    last = items.length > 1 ? items[items.length - 1] : target;
+  } else { p.children.splice(p.children.indexOf(target) + 1, 0, ...items); last = items[items.length - 1]; }
+  if (searching()) { sKeep.add(target); items.forEach(i => sKeep.add(i)); }
+  sel.clear(); render(last.id);
+}
+document.addEventListener('paste', e => {
+  if (modalOpen() || !e.clipboardData || (e.target && e.target.id === 'qIn')) return;
+  const text = e.clipboardData.getData('text/plain'), html = e.clipboardData.getData('text/html');
+  let items = /<li[\s>]/i.test(html) ? parseHtml(html) : [];
+  if (!items.length) items = parseOutline(text);
+  if (!items.length) return;
+  // The event target is the focused bullet even inside sandboxed frames where document.activeElement can be stale.
+  const a = e.target && e.target.tagName === 'TEXTAREA' && e.target.dataset.id ? e.target : null;
+  if (a && items.length === 1 && !items[0].children.length) return; // single line: normal paste
+  let target = a ? find(root, +a.dataset.id) : null;
+  if (!target && sel.size) { const r = roots(); target = r[r.length - 1]; }
+  if (!target) target = cur();
+  if (!target) return;
+  e.preventDefault();
+  insertItems(items, target, !!a);
+}, true);
+
+function toText(list = zoom.children) {
+  const ind = document.getElementById('indent').value, dash = document.getElementById('dash').checked ? '- ' : '';
+  const out = [];
+  (function w(list, d) { for (const n of list) { out.push(ind.repeat(d) + dash + n.text.replace(/\n/g, ' ')); w(n.children, d + 1); } })(list, 0);
+  return out.join('\n');
+}
+const ov = document.getElementById('ov'), outEl = document.getElementById('out');
+const modalOpen = () => ov.classList.contains('show');
+const refresh = () => { outEl.value = toText(exportList || undefined); document.getElementById('ok').textContent = ''; };
+let exportList = null;
+function showExport(list) {
+  exportList = list; document.getElementById('mt').textContent = !list ? 'Export as text' : list.length > 1 ? 'Export selection' : 'Export “' + (list[0].text.slice(0, 30) || 'bullet') + '” subtree';
+  refresh(); ov.classList.add('show'); outEl.focus(); outEl.select();
+}
+document.getElementById('closeBtn').onclick = () => ov.classList.remove('show');
+ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { ov.classList.remove('show'); topMenu.classList.remove('show'); } });
+document.getElementById('indent').onchange = refresh;
+document.getElementById('dash').onchange = refresh;
+document.getElementById('copyBtn').onclick = async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText(outEl.value); ok = true; } catch (e) {}
+  if (!ok) { outEl.focus(); outEl.select(); try { ok = document.execCommand('copy'); } catch (e) {} }
+  document.getElementById('ok').textContent = ok ? 'Copied' : 'Press Ctrl+C to copy';
+};
+function setAll(open) { (function w(n) { n.children.forEach(c => { if (c.children.length) setNodeOpen(c, open); w(c); }); })(zoom); render(); }
+const topMenu = document.getElementById('topMenu'), moreBtn = document.getElementById('moreBtn');
+moreBtn.onclick = e => {
+  e.stopPropagation(); menu.classList.remove('show');
+  const r = moreBtn.getBoundingClientRect();
+  topMenu.style.left = 'auto'; topMenu.style.right = Math.max(8, innerWidth - r.right) + 'px'; topMenu.style.top = r.bottom + 4 + 'px';
+  topMenu.classList.toggle('show');
+};
+topMenu.onclick = e => {
+  const a = e.target.dataset.a; if (!a) return; topMenu.classList.remove('show');
+  if (a === 'expandAll') setAll(true); else if (a === 'collapseAll') setAll(false); else showExport(null);
+};
+
+// Toolbar fallbacks for touch screens and hosts that swallow Enter / Tab.
+// Their mousedown is cancelled so the caret stays in the bullet being edited.
+document.querySelectorAll('.kb').forEach(b => b.addEventListener('mousedown', e => e.preventDefault()));
+document.getElementById('inBtn').onclick = () => tab(false);
+document.getElementById('outBtn').onclick = () => tab(true);
+
+document.addEventListener('keydown', e => {
+  if (modalOpen() || (e.target && e.target.id === 'qIn')) return; // the search box keeps its own Ctrl+A / Ctrl+Z
+  const mod = e.ctrlKey || e.metaKey, k = (e.key || '').toLowerCase();
+  if (mod && (k === 'z' || k === 'y')) { e.preventDefault(); (k === 'y' || e.shiftKey) ? redo() : undo(); return; }
+  if (mod && k === 'a') { e.preventDefault(); const l = vis(); anchor = l[0]; cursor = l[l.length - 1]; setSel(new Set(l)); return; }
+  if (!sel.size) return;
+  if (e.key === 'Enter') { e.preventDefault(); const r = roots(), t = r[r.length - 1]; setSel(new Set()); if (t) focusNode(t.id); }
+  else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delItems(roots()); }
+  else if (e.key === 'Escape') { setSel(new Set()); if (anchor) focusNode(anchor.id); }
+  else if (mod && (k === 'c' || k === 'x')) { e.preventDefault(); const it = roots(); try { navigator.clipboard.writeText(toText(it)); } catch (x) {} if (k === 'x') delItems(it); }
+  else if (e.key === 'Tab') {
+    e.preventDefault(); tab(e.shiftKey);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault(); const l = vis(), up = e.key === 'ArrowUp';
+    if (e.shiftKey) {
+      const ni = Math.max(0, Math.min(l.length - 1, l.indexOf(cursor) + (up ? -1 : 1))), a = l.indexOf(anchor);
+      cursor = l[ni]; setSel(new Set(l.slice(Math.min(a, ni), Math.max(a, ni) + 1)));
+    } else { const r = roots(), t = up ? r[0] : r[r.length - 1]; setSel(new Set()); focusNode((l[l.indexOf(t) + (up ? -1 : 1)] || t).id); }
+  }
+}, true);
+document.getElementById('tree').addEventListener('mousedown', e => {
+  if (e.target.id !== 'tree') return; e.preventDefault(); setSel(new Set());
+  const l = vis(); if (l.length) focusNode(l[l.length - 1].id);
+});
+// drag across bullets -> select whole bullets; drag inside one bullet -> normal text selection
+let dragFrom = null, dragTA = null, multi = false, sx = 0, sy = 0;
+const rowAt = y => {
+  let best = null, bd = Infinity;
+  for (const n of vis()) { const b = els.get(n).getBoundingClientRect(), d = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0; if (d < bd) { bd = d; best = n; } }
+  return best;
+};
+document.addEventListener('mousedown', e => {
+  dragFrom = null; multi = false; document.body.classList.remove('multi'); sx = e.clientX; sy = e.clientY;
+  if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || !e.target.closest) return;
+  if (e.target.tagName === 'TEXTAREA' && e.target.closest('#tree')) { dragTA = e.target; dragFrom = find(root, +e.target.dataset.id); }
+}, true);
+document.addEventListener('mousemove', e => {
+  if (!dragFrom || !(e.buttons & 1)) return;
+  const sh = document.getElementById('tree'), b = sh.getBoundingClientRect();
+  if (multi) { if (e.clientY < b.top + 30) sh.scrollTop -= 14; else if (e.clientY > b.bottom - 30) sh.scrollTop += 14; }
+  const n = rowAt(e.clientY); if (!n) return;
+  if (!multi) {
+    const fb = els.get(dragFrom).getBoundingClientRect();
+    if (n === dragFrom || Math.hypot(e.clientX - sx, e.clientY - sy) < 8 || (e.clientY > fb.top - 6 && e.clientY < fb.bottom + 6)) return; // still one bullet: native text selection
+  }
+  if (!multi) { multi = true; document.body.classList.add('multi'); anchor = dragFrom; try { dragTA.setSelectionRange(0, 0); } catch (x) {} }
+  const l = vis(), a = l.indexOf(dragFrom), c = l.indexOf(n); cursor = n;
+  setSel(new Set(l.slice(Math.min(a, c), Math.max(a, c) + 1)));
+  const g = window.getSelection(); if (g) g.removeAllRanges();
+}, true);
+const endDrag = () => { dragFrom = null; multi = false; document.body.classList.remove('multi'); };
+document.addEventListener('mouseup', endDrag, true);
+window.addEventListener('blur', endDrag);
+const qBox = document.getElementById('qBox'), qIn = document.getElementById('qIn');
+function startSearch(v) {
+  v = v.trim(); if (!v) { endSearch(); return; }
+  sq = v; sOver.clear(); sKeep.clear(); sel.clear(); qBox.classList.add('on'); qIn.blur(); render();
+}
+function endSearch() {
+  const was = searching();
+  sq = ''; sShown.clear(); sAnc.clear(); sOver.clear(); sKeep.clear(); qIn.value = ''; qBox.classList.remove('on');
+  if (was) { sel.clear(); render(); }
+}
+qIn.addEventListener('keydown', e => {
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Enter') { e.preventDefault(); startSearch(qIn.value); }
+  else if (e.key === 'Escape' && searching()) { e.preventDefault(); endSearch(); }
+});
+document.getElementById('qx').onclick = endSearch;
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => document.querySelectorAll('#tree textarea').forEach(fit));
+load(); render();
+</script>
+</body>
+</html>
